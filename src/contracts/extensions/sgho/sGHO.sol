@@ -11,9 +11,13 @@ interface IERC1271 {
 }
 
 contract sGHO is ERC4626, ERC20Permit, IStakedToken {
+  /// @notice Address of the GHO token
   address public immutable gho;
+  /// @notice Address of the YieldMaestro contract
   address public YIELD_MAESTRO;
+  /// @notice The total amount of GHO tokens held by the contract.
   uint256 internal internalTotalAssets;
+  /// @notice Timestamp of the last time savings were claimed.
   uint256 internal lastupdate;
 
   /// @inheritdoc IStakedToken
@@ -54,6 +58,10 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
     lastupdate = block.timestamp;
   }
 
+  /**
+   * @dev Prevents direct ETH transfers to the contract.
+   * @notice Reverts if ETH is sent to the contract.
+   */
   receive() external payable {
     revert NoEthAllowed();
   }
@@ -62,25 +70,44 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
   // @dev This is intended for backwards compatibility with the stkGHO contract and easy integration with the User Interface.
 
   /// @inheritdoc IStakedToken
+  /// @notice Stakes GHO tokens in exchange for sGHO shares. Alias for {deposit}.
+  /// @param to The address that will receive the sGHO shares.
+  /// @param amount The amount of GHO to stake.
   function stake(address to, uint256 amount) external {
     deposit(amount, to);
   }
 
   /// @inheritdoc IStakedToken
+  /// @notice Redeems sGHO shares for GHO tokens. Alias for {withdraw}.
+  /// @param to The address that will receive the GHO tokens.
+  /// @param amount The amount of sGHO shares to redeem.
   function redeem(address to, uint256 amount) external {
     withdraw(amount, to, msg.sender);
   }
 
   /// @inheritdoc IStakedToken
+  /// @notice Claims accumulated savings from the YieldMaestro contract.
+  /// @dev The `to` and `amount` parameters are unused in this implementation. Intent is Backwards compatibility.
+  /// @param to The address to send rewards to (unused).
+  /// @param amount The amount of rewards to claim (unused).
   function claimRewards(address to, uint256 amount) external {
     _claimSavings();
   }
 
   /// @inheritdoc IStakedToken
+  /// @notice Initiates the cooldown period for unstaking.
+  /// @dev This function is currently a no-op. Intent is Backwards compatibility.
   function cooldown() external {}
 
   // --- Approve by signature ---
 
+  /**
+   * @dev Internal function to validate a signature. Supports both ECDSA and ERC1271.
+   * @param signer The address of the signer.
+   * @param digest The hash of the message that was signed.
+   * @param signature The signature bytes.
+   * @return True if the signature is valid, false otherwise.
+   */
   function _isValidSignature(
     address signer,
     bytes32 digest,
@@ -108,6 +135,15 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
       abi.decode(result, (bytes4)) == IERC1271.isValidSignature.selector);
   }
 
+  /**
+   * @notice Approves the spender to spend the owner's tokens via a signed message.
+   * @dev See {IERC20Permit-permit}.
+   * @param owner The address of the token owner.
+   * @param spender The address of the spender.
+   * @param value The amount of tokens to approve.
+   * @param deadline The deadline after which the signature is no longer valid.
+   * @param signature The signature bytes.
+   */
   function permit(
     address owner,
     address spender,
@@ -143,6 +179,17 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
     emit Approval(owner, spender, value);
   }
 
+  /**
+   * @notice Approves the spender to spend the owner's tokens via a signed message (with v, r, s parameters).
+   * @dev See {IERC20Permit-permit}.
+   * @param owner The address of the token owner.
+   * @param spender The address of the spender.
+   * @param value The amount of tokens to approve.
+   * @param deadline The deadline after which the signature is no longer valid.
+   * @param v The recovery ID of the signature.
+   * @param r The r-value of the signature.
+   * @param s The s-value of the signature.
+   */
   function permit(
     address owner,
     address spender,
@@ -168,6 +215,11 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
     return _domainSeparatorV4();
   }
 
+  /**
+   * @dev Calculates the EIP712 domain separator.
+   * @param chainId The chain ID for which to calculate the separator.
+   * @return The EIP712 domain separator.
+   */
   function _calculateDomainSeparator(uint256 chainId) private view returns (bytes32) {
     return
       keccak256(
@@ -183,12 +235,24 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
       );
   }
 
+  /**
+   * @dev Returns the number of decimals used to get its user representation.
+   * @inheritdoc ERC20
+   * @return The number of decimals (18).
+   */
   function decimals() public view virtual override(ERC20, ERC4626) returns (uint8) {
     return super.decimals();
   }
 
   // --- ERC4626 Logic ---
 
+  /**
+   * @notice Deposits GHO tokens into the vault and mints sGHO shares to the receiver.
+   * @dev See {ERC4626-deposit}.
+   * @param assets The amount of GHO to deposit.
+   * @param receiver The address that will receive the sGHO shares.
+   * @return shares The amount of sGHO shares minted.
+   */
   function deposit(uint256 assets, address receiver) public override returns (uint256) {
     uint256 maxAssets = maxDeposit(receiver);
     if (assets > maxAssets) {
@@ -202,6 +266,13 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
     return shares;
   }
 
+  /**
+   * @notice Mints sGHO shares to the receiver by depositing a calculated amount of GHO tokens.
+   * @dev See {ERC4626-mint}.
+   * @param shares The amount of sGHO shares to mint.
+   * @param receiver The address that will receive the sGHO shares.
+   * @return assets The amount of GHO tokens deposited.
+   */
   function mint(uint256 shares, address receiver) public override returns (uint256) {
     uint256 maxShares = maxMint(receiver);
     if (shares > maxShares) {
@@ -216,6 +287,14 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
     return assets;
   }
 
+  /**
+   * @notice Withdraws GHO tokens from the vault by redeeming sGHO shares from the owner.
+   * @dev See {ERC4626-withdraw}.
+   * @param assets The amount of GHO to withdraw.
+   * @param receiver The address that will receive the GHO tokens.
+   * @param owner The address from which to redeem sGHO shares.
+   * @return shares The amount of sGHO shares redeemed.
+   */
   function withdraw(
     uint256 assets,
     address receiver,
@@ -234,6 +313,14 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
     return shares;
   }
 
+  /**
+   * @notice Redeems sGHO shares from the owner for GHO tokens.
+   * @dev See {ERC4626-redeem}.
+   * @param shares The amount of sGHO shares to redeem.
+   * @param receiver The address that will receive the GHO tokens.
+   * @param owner The address from which to redeem sGHO shares.
+   * @return assets The amount of GHO tokens withdrawn.
+   */
   function redeem(
     uint256 shares,
     address receiver,
@@ -252,6 +339,11 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
     return assets;
   }
 
+  /**
+   * @notice Returns the total amount of GHO tokens managed by the vault.
+   * @dev Internal accounting of GHO tokens held by the vault.
+   * @return The total GHO assets in the vault.
+   */
   function totalAssets() public view override returns (uint256) {
     return internalTotalAssets;
   }
@@ -277,6 +369,10 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
     }
   }
 
+  /**
+   * @dev Internal function that claims accumulated savings from the YieldMaestro contract.
+   * It updates `internalTotalAssets` with the claimed amount and resets `lastupdate`.
+   */
   function _claimSavings() internal {
     uint256 claimed = IYieldMaestro(YIELD_MAESTRO).claimSavings();
     internalTotalAssets += claimed;
@@ -285,6 +381,9 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
 
   /**
    * @dev Transfer any excess GHO tokens to the Yield Maestro.
+   * @notice This function allows transferring GHO tokens that were sent to this contract
+   *         in excess of the `internalTotalAssets` to the `YIELD_MAESTRO` contract.
+   *         This ensures donations are not lost and can't be used in a donation attack.
    */
   function takeDonated() external {
     uint256 balance = IERC20(gho).balanceOf(address(this));

@@ -51,12 +51,12 @@ contract YieldMaestroTest is TestnetProcedures {
   }
 
   // --- Constructor Tests ---
-  function test_constructor() external {
+  function test_constructor() external view  {
     assertEq(address(yieldMaestro.GHO()), address(gho), 'GHO address mismatch');
   }
 
   // --- Initialize Tests ---
-  function test_initialize() external {
+  function test_initialize() external view {
     assertEq(yieldMaestro.sGHO(), address(sgho), 'sGHO address mismatch');
     assertEq(yieldMaestro.lastClaimTimestamp(), block.timestamp, 'lastClaimTimestamp mismatch');
     assertEq(yieldMaestro.targetRate(), 0, 'initial targetRate should be 0');

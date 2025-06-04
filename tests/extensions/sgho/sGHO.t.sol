@@ -90,7 +90,7 @@ contract sGhoTest is TestnetProcedures {
 
   // --- Constructor Tests ---
 
-  function test_constructor() external {
+  function test_constructor() external view {
     assertEq(sgho.gho(), address(gho), 'GHO address mismatch');
     assertEq(sgho.YIELD_MAESTRO(), address(yieldMaestro), 'YieldMaestro address mismatch');
     assertEq(sgho.deploymentChainId(), block.chainid, 'Chain ID mismatch');
@@ -510,7 +510,7 @@ contract sGhoTest is TestnetProcedures {
 
   // --- IStakedToken Interface Tests ---
 
-  function test_stakedToken() external {
+  function test_stakedToken() external view {
     assertEq(sgho.STAKED_TOKEN(), address(gho), 'STAKED_TOKEN should return GHO address');
   }
 
