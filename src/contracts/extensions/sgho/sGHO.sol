@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: agpl-3
 pragma solidity ^0.8.19;
 
-import {ERC4626, ERC20, IERC20} from 'openzeppelin-contracts/contracts/token/ERC20/extensions/ERC4626.sol';
-import {ERC20Permit, EIP712} from 'openzeppelin-contracts/contracts/token/ERC20/extensions/ERC20Permit.sol';
+import {ERC4626Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
+import {ERC20PermitUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
+import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {TransparentUpgradeableProxy} from '@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol';
+import {ProxyAdmin} from '@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol';
 import {IYieldMaestro} from './interfaces/IYieldMaestro.sol';
 import {IStakedToken} from '../../../contracts/rewards/interfaces/IStakedToken.sol';
 
@@ -10,9 +15,9 @@ interface IERC1271 {
   function isValidSignature(bytes32, bytes memory) external view returns (bytes4);
 }
 
-contract sGHO is ERC4626, ERC20Permit, IStakedToken {
+contract sGHO is Initializable, ERC4626Upgradeable, ERC20PermitUpgradeable, IStakedToken {
   /// @notice Address of the GHO token
-  address public immutable gho;
+  address public gho;
   /// @notice Address of the YieldMaestro contract
   address public YIELD_MAESTRO;
   /// @notice The total amount of GHO tokens held by the contract.
@@ -21,11 +26,10 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
   uint256 internal lastupdate;
 
   /// @inheritdoc IStakedToken
-  address public STAKED_TOKEN = gho;
+  address public STAKED_TOKEN;
 
   // --- EIP712 niceties ---
   uint256 public immutable deploymentChainId;
-  bytes32 private immutable _DOMAIN_SEPARATOR;
   bytes32 public constant PERMIT_TYPEHASH =
     keccak256('Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)');
   string public constant VERSION = '1';
@@ -41,21 +45,28 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
   error NoEthAllowed();
 
   /**
+   * @dev Constructor for the sGHO contract.
+   */
+  constructor() {
+    deploymentChainId = block.chainid;
+    lastupdate = block.timestamp;
+  }
+
+  /**
    * @dev Set the underlying asset contract. This must be an ERC20-compatible contract (ERC20 or ERC777).
    * @param _gho The address of the GHO token contract.
    * @param _yieldMaestro The address of the Yield Maestro contract.
    */
-  constructor(
+  function initialize(
     address _gho,
     address _yieldMaestro
-  ) ERC20('sGHO', 'sGHO') ERC4626(IERC20(_gho)) ERC20Permit('sGHO') {
-    deploymentChainId = block.chainid;
-    _DOMAIN_SEPARATOR = _calculateDomainSeparator(block.chainid);
+  ) public initializer {
+    __ERC20_init('sGHO', 'sGHO');
+    __ERC4626_init(IERC20(_gho));
+    __ERC20Permit_init('sGHO');
     gho = _gho;
-    STAKED_TOKEN = gho;
+    STAKED_TOKEN = _gho;
     YIELD_MAESTRO = _yieldMaestro;
-    internalTotalAssets = 0;
-    lastupdate = block.timestamp;
   }
 
   /**
@@ -161,12 +172,12 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
 
     uint256 nonce = _useNonce(owner);
 
+    bytes32 currentDomainSeparator = _calculateDomainSeparator(block.chainid);
+
     bytes32 digest = keccak256(
       abi.encodePacked(
         '\x19\x01',
-        block.chainid == deploymentChainId
-          ? _DOMAIN_SEPARATOR
-          : _calculateDomainSeparator(block.chainid),
+        currentDomainSeparator,
         keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, value, nonce, deadline))
       )
     );
@@ -198,20 +209,22 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
     uint8 v,
     bytes32 r,
     bytes32 s
-  ) public virtual override {
-    permit(owner, spender, value, deadline, abi.encodePacked(r, s, v));
+  ) public virtual override(ERC20PermitUpgradeable) {
+    bytes memory signature = abi.encodePacked(r, s, v);
+    permit(owner, spender, value, deadline, signature);
   }
+
   /**
    * @dev See {IERC20Permit-nonces}.
    */
-  function nonces(address owner) public view virtual override(ERC20Permit) returns (uint256) {
+  function nonces(address owner) public view virtual override(ERC20PermitUpgradeable) returns (uint256) {
     return super.nonces(owner);
   }
 
   /**
    * @dev See {IERC20Permit-DOMAIN_SEPARATOR}.
    */
-  function DOMAIN_SEPARATOR() external view virtual override returns (bytes32) {
+  function DOMAIN_SEPARATOR() external view virtual override(ERC20PermitUpgradeable) returns (bytes32) {
     return _domainSeparatorV4();
   }
 
@@ -237,10 +250,10 @@ contract sGHO is ERC4626, ERC20Permit, IStakedToken {
 
   /**
    * @dev Returns the number of decimals used to get its user representation.
-   * @inheritdoc ERC20
+   * @inheritdoc ERC20Upgradeable
    * @return The number of decimals (18).
    */
-  function decimals() public view virtual override(ERC20, ERC4626) returns (uint8) {
+  function decimals() public view virtual override(ERC20Upgradeable, ERC4626Upgradeable) returns (uint8) {
     return super.decimals();
   }
 

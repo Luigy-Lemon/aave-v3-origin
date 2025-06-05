@@ -32,8 +32,9 @@ contract YieldMaestroTest is TestnetProcedures {
 
     // Deploy contracts
     gho = new TestnetERC20('Mock GHO', 'GHO', 18, poolAdmin);
-    yieldMaestro = new YieldMaestro(address(gho), address(contracts.aclManager));
-    sgho = new sGHO(address(gho), address(yieldMaestro));
+    yieldMaestro = new YieldMaestro();
+    sgho = new sGHO();
+
 
     // Grant roles
     vm.startPrank(poolAdmin);
@@ -42,8 +43,9 @@ contract YieldMaestroTest is TestnetProcedures {
     aclManager.grantRole(yieldMaestro.FUNDS_ADMIN_ROLE(), fundsAdmin);
     vm.stopPrank();
 
-    // Initialize YieldMaestro
-    yieldMaestro.initialize(address(sgho));
+    // Initialize YieldMaestro and sGHO
+    yieldMaestro.initialize(address(gho), address(contracts.aclManager), address(sgho));
+    sgho.initialize(address(gho), address(yieldMaestro));
 
     // Fund users
     deal(address(gho), user1, 1_000_000 ether, true);
@@ -64,7 +66,7 @@ contract YieldMaestroTest is TestnetProcedures {
 
   function test_revert_initialize_alreadyInitialized() external {
     vm.expectRevert(abi.encodeWithSignature('InvalidInitialization()'));
-    yieldMaestro.initialize(address(sgho));
+    yieldMaestro.initialize(address(gho), address(contracts.aclManager), address(sgho));
   }
 
   // --- Target Rate Tests ---

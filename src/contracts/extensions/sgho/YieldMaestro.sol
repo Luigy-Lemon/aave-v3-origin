@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: agpl-3
 pragma solidity ^0.8.19;
 
-import {Initializable} from 'openzeppelin-contracts/contracts/proxy/utils/Initializable.sol';
-import 'openzeppelin-contracts/contracts/interfaces/IERC4626.sol';
-import {IERC20Permit} from 'openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Permit.sol';
-import {IAccessControl} from 'openzeppelin-contracts/contracts/access/IAccessControl.sol';  
+import {Initializable} from '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
+import '@openzeppelin/contracts/interfaces/IERC4626.sol';
+import {IERC20Permit} from '@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol';
+import {IAccessControl} from '@openzeppelin/contracts/access/IAccessControl.sol';
 import {IYieldMaestro} from './interfaces/IYieldMaestro.sol';
 
 contract YieldMaestro is Initializable, IYieldMaestro {
   /// @notice Address of the GHO token contract.
-  IERC20 public immutable GHO;
+  IERC20 public GHO;
   /// @notice Address of the Aave AccessControlList (ACL) Manager contract.
   IAccessControl internal aclManager;
 
@@ -35,10 +35,15 @@ contract YieldMaestro is Initializable, IYieldMaestro {
    * @notice Initializes the contract with the GHO token and ACL manager addresses.
    * @param _gho The address of the GHO token contract.
    * @param _aclmanager The address of the Aave AccessControlList (ACL) Manager contract.
+   * @param _sGho The address of the sGHO (Staked GHO) token contract (the vault).
+   * @custom:oz-upgrades-unsafe-allow payable
    */
-  constructor(address _gho, address _aclmanager) {
+  function initialize(address _gho, address _aclmanager, address _sGho) public payable initializer {
     GHO = IERC20(_gho);
     aclManager = IAccessControl(_aclmanager);
+    sGHO = _sGho;
+    lastClaimTimestamp = block.timestamp;
+    targetRate = 0;
   }
 
   /**
@@ -82,18 +87,6 @@ contract YieldMaestro is Initializable, IYieldMaestro {
       revert OnlyVault();
     }
     _;
-  }
-
-  /**
-   * @dev Initialize receiver, require minimum balance to not set a dripRate of 0
-   * @notice Initializes the YieldMaestro contract.
-   * @param _sGho The address of the sGHO (Staked GHO) token contract (the vault).
-   * @custom:oz-upgrades-unsafe-allow payable
-   */
-  function initialize(address _sGho) public payable initializer {
-    sGHO = _sGho;
-    lastClaimTimestamp = block.timestamp;
-    targetRate = 0;
   }
 
   /**

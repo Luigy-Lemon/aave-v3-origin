@@ -52,13 +52,15 @@ contract sGhoTest is TestnetProcedures {
     gho = new TestnetERC20('Mock GHO', 'GHO', 18, poolAdmin);
 
     // Deploy YieldMaestro first
-    yieldMaestro = new YieldMaestro(address(gho), address(contracts.aclManager));
+    yieldMaestro = new YieldMaestro();
 
     // Deploy sGHO with YieldMaestro address
-    sgho = new sGHO(address(gho), address(yieldMaestro));
+    sgho = new sGHO();
     deal(address(gho), address(sgho), 1 ether, true);
+    
     // Initialize YieldMaestro with sGHO address
-    yieldMaestro.initialize(address(sgho));
+    sgho.initialize(address(gho), address(yieldMaestro));
+    yieldMaestro.initialize(address(gho), address(contracts.aclManager), address(sgho));
 
     // Grant YIELD_MANAGER role to yManager through ACLManager
     vm.startPrank(poolAdmin);
